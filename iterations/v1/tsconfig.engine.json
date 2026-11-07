@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "outDir": "server/engine",
+    "rootDir": "src/engine",
+    "strict": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/engine/**/*.ts"],
+  "exclude": ["src/engine/**/*.test.ts"]
+}
