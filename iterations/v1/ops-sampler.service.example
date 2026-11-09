@@ -1,0 +1,17 @@
+# Ejemplo: muestreo cada 5 minutos (systemd user o root).
+# Ajustar rutas y usuario.
+
+[Unit]
+Description=Panel ops sampler
+After=network.target
+
+[Service]
+Type=oneshot
+Environment=OPS_CLI_HOME=/home/dev/panel-disputas/iterations/v1/sessions/home
+Environment=UBER_CLI=/home/dev/app-delivery/panel-delivery-fuentes/delivery-monitor-servidor/clients/uber/uber.py
+Environment=PYA_CLI=/home/dev/app-delivery/panel-delivery-fuentes/delivery-monitor-servidor/clients/pya/pya.py
+ExecStart=/usr/bin/python3 /home/dev/panel-disputas/operations/panel_ops.py sample --agregador uber
+ExecStart=/usr/bin/python3 /home/dev/panel-disputas/operations/panel_ops.py sample --agregador pedidosya
+
+[Install]
+WantedBy=multi-user.target

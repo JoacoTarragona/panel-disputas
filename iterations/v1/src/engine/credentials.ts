@@ -31,3 +31,30 @@ export function preparePyaTokens(raw: string): Prepared {
   }
   return { ok: true, value: JSON.stringify(kept) }
 }
+
+const MAX_CREDENTIAL = 65536
+
+export function injectCredentials(input: { uber?: unknown; pedidosya?: unknown }):
+  | { ok: true; uber?: string; pedidosya?: string }
+  | { ok: false; error: string } {
+  const hasUber = input.uber !== undefined && input.uber !== null && input.uber !== ''
+  const hasPya = input.pedidosya !== undefined && input.pedidosya !== null && input.pedidosya !== ''
+  if (!hasUber && !hasPya) return { ok: false, error: 'Falta la credencial' }
+  const prepared: { uber?: string; pedidosya?: string } = {}
+  if (hasUber) {
+    if (typeof input.uber !== 'string' || input.uber.length > MAX_CREDENTIAL) {
+      return { ok: false, error: 'La cookie debe ser el header Cookie en una sola línea' }
+    }
+    const uber = prepareUberCookie(input.uber)
+    if (!uber.ok) return uber
+    prepared.uber = uber.value
+  }
+  if (hasPya) {
+    const raw = typeof input.pedidosya === 'string' ? input.pedidosya : JSON.stringify(input.pedidosya)
+    if (raw.length > MAX_CREDENTIAL) return { ok: false, error: 'pya_tokens.json no es JSON válido' }
+    const pya = preparePyaTokens(raw)
+    if (!pya.ok) return pya
+    prepared.pedidosya = pya.value
+  }
+  return { ok: true, ...prepared }
+}

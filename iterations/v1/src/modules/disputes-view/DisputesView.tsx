@@ -1,7 +1,9 @@
-import { useRef, useState, type FormEvent } from 'react'
-import { theme } from '../../constants/theme'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { PanelShell } from '../../app/PanelShell'
+import { platformConfigured, type CredentialsStatusBody } from '../../lib/credential-status'
 import type { BoardSummary, DisputeRow } from '../../engine/dispute-list'
 import { remainingWait } from '../../engine/wait'
+import { api } from '../../lib/api'
 
 type Phase = 'login' | 'loading' | 'list' | 'empty' | 'error'
 type Source = 'uber' | 'pedidosya'
@@ -37,15 +39,6 @@ async function hold(startedAt: number): Promise<void> {
   if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait))
 }
 
-async function send(path: string, body?: unknown, method?: string): Promise<Response> {
-  return fetch(path, {
-    method: method || (body === undefined ? 'GET' : 'POST'),
-    credentials: 'include',
-    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
-}
-
 function money(value: number): string {
   return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(value)
 }
@@ -68,9 +61,22 @@ function when(value?: string): string {
   }).format(date)
 }
 
+const ISSUE_ES: Record<string, string> = {
+  'issue with items': 'Problema con productos',
+  'wrong order': 'Pedido incorrecto',
+  'missing items': 'Productos faltantes',
+  'missing item': 'Producto faltante',
+  'partial missing items': 'Productos faltantes',
+  'food quality': 'Calidad del pedido',
+  'never received': 'No entregado',
+  'order canceled': 'Pedido cancelado',
+  'order cancelled': 'Pedido cancelado',
+}
+
 function issueLabel(value?: string): string {
   if (!value) return ''
-  return value.replace(/^ORDER_(ISSUE|TAG)_/, '').replace(/_/g, ' ').toLowerCase()
+  const clean = value.replace(/^ORDER_(ISSUE|TAG)_/, '').replace(/_/g, ' ').toLowerCase()
+  return ISSUE_ES[clean] || clean
 }
 
 function bucketLabel(row: Row): string {
@@ -80,19 +86,17 @@ function bucketLabel(row: Row): string {
   return 'Pendiente'
 }
 
-export function DisputesView() {
-  const [phase, setPhase] = useState<Phase>('login')
+type DisputesViewProps = { embedded?: boolean }
+
+export function DisputesView({ embedded }: DisputesViewProps = {}) {
+  const [phase, setPhase] = useState<Phase>(embedded ? 'loading' : 'login')
   const [caption, setCaption] = useState('revisando informacion')
   const [user, setUser] = useState('')
   const [password, setPassword] = useState('')
   const [rows, setRows] = useState<Row[]>([])
   const [notice, setNotice] = useState('')
   const [openId, setOpenId] = useState<string | null>(null)
-  const [loggedIn, setLoggedIn] = useState(false)
-  const [uberState, setUberState] = useState('missing')
-  const [pyaState, setPyaState] = useState('missing')
-  const [uberValue, setUberValue] = useState('')
-  const [pyaValue, setPyaValue] = useState('')
+  const [loggedIn, setLoggedIn] = useState(Boolean(embedded))
   const [source, setSource] = useState<Source>('uber')
   const [tab, setTab] = useState<Tab>('pending')
   const [dias, setDias] = useState(30)
@@ -103,22 +107,32 @@ export function DisputesView() {
   const [ready, setReady] = useState<Record<string, string[]>>({})
   const [busy, setBusy] = useState(false)
   const imagesRef = useRef<Record<string, Pick<Row, 'images' | 'warning' | 'hasAttachedImage'>>>({})
-  const [showCredentials, setShowCredentials] = useState(false)
   const cache = useRef<Record<string, { rows: Row[]; summary: BoardSummary; topStores: { store: string; count: number }[]; windowLabel: string }>>({})
   const requestId = useRef(0)
 
+  useEffect(() => {
+    if (!embedded) return
+    void (async () => {
+      const status = await refreshStatus()
+      if (status && !platformConfigured(status.uber) && !platformConfigured(status.pya, status.pedidosya)) {
+        setPhase('error')
+        setNotice('Sin sesión de Uber/PedidosYa — en Módulos → Credenciales traé la cookie o hacé login')
+        return
+      }
+      await loadList('uber', 'pending', dias)
+    })()
+  }, [embedded])
+
   async function refreshStatus() {
-    const response = await send('/api/credentials/status')
+    const response = await api('/api/credentials/status')
     if (!response.ok) return
     const body = await response.json()
-    setUberState(body.uber)
-    setPyaState(body.pedidosya)
-    return body as { uber: string; pedidosya: string }
+    return body as CredentialsStatusBody
   }
 
   async function enter(event: FormEvent) {
     event.preventDefault()
-    const response = await send('/api/login', { user, password })
+    const response = await api('/api/login', { user, password })
     setPassword('')
     if (!response.ok) {
       setNotice('sin credencial')
@@ -127,30 +141,12 @@ export function DisputesView() {
     setNotice('')
     setLoggedIn(true)
     const status = await refreshStatus()
-    if (status && status.uber === 'missing' && status.pedidosya === 'missing') {
+    if (status && !platformConfigured(status.uber) && !platformConfigured(status.pya, status.pedidosya)) {
       setPhase('error')
-      setNotice('sin credencial')
+      setNotice('Sin sesión Uber/PedidosYa — Módulos → Credenciales')
       return
     }
     await loadList('uber', 'pending', dias)
-  }
-
-  async function saveCredential(which: Source) {
-    const value = which === 'uber' ? uberValue : pyaValue
-    const response = await send(which === 'uber' ? '/api/credentials/uber' : '/api/credentials/pedidosya', { value }, 'PUT')
-    const body = await response.json()
-    if (which === 'uber') setUberValue('')
-    else setPyaValue('')
-    if (!response.ok) {
-      setNotice(body.error || 'API caída')
-      return
-    }
-    setUberState(body.uber)
-    setPyaState(body.pedidosya)
-    for (const key of Object.keys(cache.current)) {
-      if (key.startsWith(`${which}:`)) delete cache.current[key]
-    }
-    if (source === which) await loadList(which, tab, dias, true)
   }
 
   function applyCached(saved: { rows: Row[]; summary: BoardSummary; topStores: { store: string; count: number }[]; windowLabel: string }) {
@@ -199,7 +195,7 @@ export function DisputesView() {
     setNotice('')
     setPhase('loading')
     try {
-      const response = await send(`/api/disputes?agregador=${agregador}&estado=${estado}&dias=${days}`)
+      const response = await api(`/api/disputes?agregador=${agregador}&estado=${estado}&dias=${days}`)
       await hold(started)
       if (id !== requestId.current) return
       const body = await response.json()
@@ -235,7 +231,7 @@ export function DisputesView() {
     const started = Date.now()
     setCaption('revisando informacion')
     setBusy(true)
-    const response = await send('/api/evidencia', { agregador, numero_orden: numero })
+    const response = await api('/api/evidencia', { agregador, numero_orden: numero })
     await hold(started)
     const body = await response.json()
     setRows((current) =>
@@ -262,7 +258,7 @@ export function DisputesView() {
 
   async function armar(row: Row) {
     if (!row.images?.length) return
-    const response = await send('/api/disputas/armar', {
+    const response = await api('/api/disputas/armar', {
       agregador: row.aggregator,
       numero_orden: row.orderId,
       evidence_ids: row.images,
@@ -279,7 +275,7 @@ export function DisputesView() {
   async function enviar(row: Row) {
     const evidenceIds = ready[`${row.aggregator}:${row.orderId}`]
     if (!evidenceIds?.length) return
-    const response = await send('/api/disputas/enviar', {
+    const response = await api('/api/disputas/enviar', {
       agregador: row.aggregator,
       numero_orden: row.orderId,
       evidence_ids: evidenceIds,
@@ -288,147 +284,147 @@ export function DisputesView() {
     setNotice(body.message || body.error || 'API caída')
   }
 
-  const page = {
-    minHeight: '100vh',
-    background: theme.background,
-    color: theme.text,
-    padding: theme.space.lg,
-    fontFamily: 'system-ui, sans-serif',
-    fontSize: theme.fontSize.md,
-  }
-  const button = {
-    background: 'transparent',
-    color: theme.text,
-    border: `2px solid ${theme.border}`,
-    borderRadius: 0,
-    padding: `${theme.space.sm}px ${theme.space.md}px`,
-    fontSize: theme.fontSize.sm,
-    fontWeight: 700,
-  }
   const needle = query.trim().toLowerCase()
   const visible = rows.filter((row) => !needle || row.orderId.toLowerCase().includes(needle) || (row.store || '').toLowerCase().includes(needle))
   const closed = summary.won + summary.lost
   const rate = closed ? Math.round((summary.won / closed) * 100) : 0
   const readyCount = Object.keys(ready).filter((id) => id.startsWith(`${source}:`)).length
   const cards = [
-    { label: 'Cobros sin disputar', value: String(summary.pending), detail: summary.pendingAmount ? `${money(summary.pendingAmount)} cobrados` : 'cobrados', color: theme.accent },
-    { label: 'Disputas abiertas', value: String(summary.open), detail: 'en revisión', color: theme.textMuted },
-    { label: 'Ganadas', value: String(summary.won), detail: 'recuperados', color: theme.success },
-    { label: 'Perdidas', value: String(summary.lost), detail: 'no recuperados', color: theme.error },
-    { label: 'Tasa de éxito', value: `${rate}%`, detail: 'ganadas / cerradas', color: theme.border },
-    { label: 'Requests armados', value: String(readyCount), detail: 'listos para enviar', color: theme.accent },
+    { label: 'Cobros sin disputar', value: String(summary.pending), detail: summary.pendingAmount ? `${money(summary.pendingAmount)} cobrados` : 'cobrados', accent: 'var(--warn)' },
+    { label: 'Disputas abiertas', value: String(summary.open), detail: 'en revisión', accent: '#9a8cb8' },
+    { label: 'Ganadas', value: String(summary.won), detail: 'recuperados', accent: 'var(--ok)' },
+    { label: 'Perdidas', value: String(summary.lost), detail: 'no recuperados', accent: 'var(--bad)' },
+    { label: 'Tasa de éxito', value: `${rate}%`, detail: 'ganadas / cerradas', accent: 'var(--line)' },
+    { label: 'Requests armados', value: String(readyCount), detail: 'listos para enviar', accent: 'var(--line)' },
   ]
-
-  return (
-    <main style={page}>
-      <img src="/tarragona-logo.png" alt="Tarragona" style={{ height: 72, borderBottom: `4px solid ${theme.accent}` }} />
-      {phase === 'login' && (
-        <form onSubmit={enter} style={{ marginTop: theme.space.lg, display: 'grid', gap: theme.space.sm, maxWidth: 280 }}>
-          <input aria-label="usuario" value={user} onChange={(event) => setUser(event.target.value)} style={button} />
-          <input aria-label="contraseña" type="password" value={password} onChange={(event) => setPassword(event.target.value)} style={button} />
-          <button type="submit" style={button}>Entrar</button>
-          {notice && <p style={{ color: theme.error }}>{notice}</p>}
-        </form>
-      )}
-      {loggedIn && (
-        <>
-          <header style={{ display: 'flex', justifyContent: 'space-between', gap: theme.space.md, alignItems: 'flex-end', marginTop: theme.space.lg, flexWrap: 'wrap' }}>
-            <div>
-              <h1 style={{ fontSize: theme.fontSize.lg, margin: 0 }}>Disputas · {source === 'uber' ? 'Uber Eats' : 'PedidosYa'}</h1>
-              <p style={{ color: theme.textMuted, fontSize: theme.fontSize.sm, margin: `${theme.space.xs}px 0 0` }}>
-                Actualizado {windowLabel || 'America/Santiago'}
-              </p>
-            </div>
-            <div style={{ display: 'flex', gap: theme.space.sm, alignItems: 'center' }}>
-              <span style={{ color: theme.textMuted, fontSize: theme.fontSize.sm }}>Período</span>
-              <select aria-label="Período" value={dias} onChange={(event) => { const days = Number(event.target.value); setDias(days); void loadList(source, tab, days, true) }} style={button}>
-                <option value={7}>7 días</option>
-                <option value={30}>30 días</option>
-                <option value={90}>90 días</option>
-              </select>
-              <button type="button" style={{ ...button, borderColor: theme.accent }} onClick={() => loadList(source, tab, dias, true)}>Actualizar</button>
-            </div>
-          </header>
-          <div style={{ display: 'flex', gap: theme.space.sm, marginTop: theme.space.md }}>
-            <button type="button" style={{ ...button, borderColor: source === 'uber' ? theme.accent : theme.border }} onClick={() => choose('uber')}>Uber</button>
-            <button type="button" style={{ ...button, borderColor: source === 'pedidosya' ? theme.accent : theme.border }} onClick={() => choose('pedidosya')}>PedidosYa</button>
-            <button type="button" style={button} onClick={() => setShowCredentials((current) => !current)}>Credenciales</button>
-          </div>
-          {showCredentials && (
-            <section style={{ marginTop: theme.space.md, display: 'grid', gap: theme.space.sm, maxWidth: 640 }}>
-              <p style={{ color: theme.textMuted }}>Uber: {uberState === 'configured' ? 'cargada' : 'falta'} · PedidosYa: {pyaState === 'configured' ? 'cargada' : 'falta'}</p>
-              <textarea aria-label="cookie de Uber" value={uberValue} onChange={(event) => setUberValue(event.target.value)} style={{ ...button, minHeight: 72 }} autoComplete="off" />
-              <button type="button" style={button} onClick={() => saveCredential('uber')}>Guardar Uber</button>
-              <textarea aria-label="tokens de PedidosYa" value={pyaValue} onChange={(event) => setPyaValue(event.target.value)} style={{ ...button, minHeight: 72 }} autoComplete="off" />
-              <button type="button" style={button} onClick={() => saveCredential('pedidosya')}>Guardar PedidosYa</button>
-            </section>
-          )}
-          <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: theme.space.sm, marginTop: theme.space.lg }}>
-            {cards.map((card) => (
-              <article key={card.label} style={{ border: `1px solid ${theme.border}`, borderTop: `3px solid ${card.color}`, padding: theme.space.md }}>
-                <p style={{ color: theme.textMuted, fontSize: theme.fontSize.sm, margin: 0 }}>{card.label}</p>
-                <p style={{ fontSize: theme.fontSize.lg, margin: `${theme.space.xs}px 0` }}>{card.value}</p>
-                <p style={{ color: theme.textMuted, fontSize: theme.fontSize.sm, margin: 0 }}>{card.detail}</p>
-              </article>
-            ))}
-          </section>
-          <p style={{ color: theme.textMuted, fontSize: theme.fontSize.sm }}>
-            Con incidencia reportada: {summary.reported} · No entregados: {summary.missed} · Cancelados: {summary.canceled}
-          </p>
-          {topStores.length > 0 && (
-            <p style={{ color: theme.text, fontSize: theme.fontSize.sm }}>
-              Más cobros pendientes: {topStores.map((item) => `${item.store} (${item.count})`).join(' · ')}
-            </p>
-          )}
-          <div style={{ display: 'flex', gap: theme.space.sm, flexWrap: 'wrap', alignItems: 'center' }}>
-            {TABS.map((item) => (
-              <button key={item.id} type="button" style={{ ...button, borderColor: tab === item.id ? theme.accent : theme.border }} onClick={() => chooseTab(item.id)}>
-                {item.label}{item.key ? ` ${summary[item.key]}` : ''}
-              </button>
-            ))}
-            <input aria-label="Buscar pedido o tienda" placeholder="Buscar pedido o tienda" value={query} onChange={(event) => setQuery(event.target.value)} style={button} />
-            <button type="button" style={button} onClick={() => addImage(source, query.trim())}>Buscar imagen manual</button>
-          </div>
-          {notice && <p style={{ color: notice === 'Request armado' ? theme.success : theme.error }}>{notice}</p>}
-          {(phase === 'loading' || busy) && <pre style={{ color: theme.text }}>{`${CHICKEN} ${caption}`}</pre>}
-          {phase === 'empty' && <pre style={{ color: theme.text }}>{`${CHICKEN}\ntodo en orden hoy`}</pre>}
-          {phase === 'list' && (
-            <div style={{ marginTop: theme.space.md }}>
-              <p style={{ color: theme.textMuted, fontSize: theme.fontSize.sm }}>{visible.length} pedido(s)</p>
-              <div style={{ display: 'grid', gridTemplateColumns: '0.7fr 1.4fr 1fr 1.2fr 0.7fr 0.9fr auto', gap: theme.space.md, color: theme.textMuted, fontSize: theme.fontSize.sm }}>
-                <span>PEDIDO</span><span>TIENDA</span><span>FECHA</span><span>PROBLEMA</span><span>MONTO</span><span>ESTADO</span><span />
-              </div>
-              {visible.map((row) => {
-                const key = `${row.aggregator}-${row.orderId}`
-                const id = `${row.aggregator}:${row.orderId}`
-                const hasImage = Boolean(row.images?.length)
-                const armed = Boolean(ready[id]?.length)
-                const border = row.warning ? theme.error : hasImage ? theme.success : theme.border
-                const locked = { ...button, color: theme.textMuted, borderColor: theme.textMuted }
-                return (
-                  <article key={key} style={{ display: 'grid', gridTemplateColumns: '0.7fr 1.4fr 1fr 1.2fr 0.7fr 0.9fr auto', gap: theme.space.md, alignItems: 'center', borderBottom: `1px solid ${border}`, padding: `${theme.space.sm}px 0` }}>
-                    <span>{row.orderId}</span>
-                    <span>{row.store || ''}</span>
-                    <span>{when(row.requested)}</span>
-                    <span>{issueLabel(row.issue || row.status)}</span>
-                    <span>{row.amount != null ? money(row.amount) : ''}</span>
-                    <span>{bucketLabel(row)}{armed ? ' · Request armado' : ''}</span>
-                    <span style={{ display: 'flex', gap: theme.space.xs }}>
-                      <button type="button" style={button} onClick={() => addImage(row.aggregator, row.orderId)}>Agregar imagen</button>
-                      <button type="button" style={hasImage ? { ...button, borderColor: theme.success } : locked} disabled={!hasImage} onClick={() => armar(row)}>Armar disputa</button>
-                      <button type="button" style={armed ? { ...button, borderColor: theme.accent } : locked} disabled={!armed} onClick={() => enviar(row)}>Enviar disputa</button>
-                    </span>
-                    {row.warning && <p style={{ gridColumn: '1 / -1', color: theme.error }}>{row.warning}</p>}
-                    {openId === key && row.images?.map((imageId) => (
-                      <img key={imageId} alt="" src={`/api/evidencia/${imageId}/imagen`} style={{ gridColumn: '1 / -1', maxWidth: 240 }} />
-                    ))}
-                  </article>
-                )
-              })}
-            </div>
-          )}
-        </>
-      )}
-    </main>
+  const stampParts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Santiago',
+    day: 'numeric',
+    month: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  }).formatToParts(new Date())
+  const stampPart = (type: string) => stampParts.find((part) => part.type === type)?.value || ''
+  const stamp = `${stampPart('day')}/${stampPart('month')}, ${stampPart('hour')}:${stampPart('minute')} ${stampPart('dayPeriod').toLowerCase().startsWith('a') ? 'a. m.' : 'p. m.'}`
+  const periodTools = (
+    <div className="filters" style={{ margin: 0 }}>
+      <span className="sub">Período</span>
+      <select className="field-input" aria-label="Período" value={dias} onChange={(event) => { const days = Number(event.target.value); setDias(days); void loadList(source, tab, days, true) }}>
+        <option value={7}>7 días</option>
+        <option value={30}>30 días</option>
+        <option value={90}>90 días</option>
+      </select>
+      <button type="button" className="btn-primary" onClick={() => loadList(source, tab, dias, true)}>Actualizar</button>
+    </div>
   )
+
+  if (!loggedIn) {
+    return (
+      <form onSubmit={enter} className="login-wrap">
+        <div className="card login-card" style={{ display: 'grid', gap: 12 }}>
+          <input aria-label="usuario" className="field-input" value={user} onChange={(event) => setUser(event.target.value)} />
+          <input aria-label="contraseña" className="field-input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
+          <button type="submit" className="btn-primary">Entrar</button>
+          {notice && <p className="msg-bad">{notice}</p>}
+        </div>
+      </form>
+    )
+  }
+
+  const shell = (
+    <PanelShell
+      tab="disputas"
+      title={`Disputas · ${source === 'uber' ? 'Uber Eats' : 'PedidosYa'}`}
+      subtitle={`Actualizado ${stamp}${windowLabel ? ` · ${windowLabel}` : ''}`}
+      actions={periodTools}
+    >
+      <div className="filters">
+        <div className="seg">
+          <button type="button" className={source === 'uber' ? 'on' : ''} onClick={() => choose('uber')}>Uber</button>
+          <button type="button" className={source === 'pedidosya' ? 'on' : ''} onClick={() => choose('pedidosya')}>PedidosYa</button>
+        </div>
+      </div>
+      <section className="grid-kpis" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+        {cards.map((card) => (
+          <article key={card.label} className="card card-kpi" style={{ borderTopColor: card.accent, borderTopWidth: 3, borderTopStyle: 'solid', marginBottom: 0 }}>
+            <p className="sub" style={{ margin: 0 }}>{card.label}</p>
+            <p style={{ fontSize: 28, fontWeight: 700, margin: '8px 0 4px', lineHeight: 1 }}>{card.value}</p>
+            <p className="sub" style={{ margin: 0 }}>{card.detail}</p>
+          </article>
+        ))}
+      </section>
+      <p className="sub">
+        Con incidencia reportada: <b style={{ color: 'var(--ink)' }}>{summary.reported}</b>
+        {' · '}No entregados: <b style={{ color: 'var(--ink)' }}>{summary.missed}</b>
+        {' · '}Cancelados: <b style={{ color: 'var(--ink)' }}>{summary.canceled}</b>
+      </p>
+      {topStores.length > 0 && (
+        <p className="sub">
+          Más cobros pendientes:{' '}
+          {topStores.map((item) => (
+            <span key={item.store}>
+              {' '}
+              <b style={{ color: 'var(--ink)' }}>{item.store}</b> ({item.count})
+            </span>
+          ))}
+        </p>
+      )}
+      <div className="filters">
+        <div className="seg">
+          {TABS.map((item) => (
+            <button key={item.id} type="button" className={tab === item.id ? 'on' : ''} onClick={() => chooseTab(item.id)}>
+              {item.label}
+              {item.key ? ` ${summary[item.key]}` : ''}
+            </button>
+          ))}
+        </div>
+        <input aria-label="Buscar pedido o tienda" className="field-input" placeholder="Buscar pedido o tienda" value={query} onChange={(event) => setQuery(event.target.value)} style={{ flex: 2, minWidth: 180 }} />
+        <button type="button" className="btn-secondary" onClick={() => addImage(source, query.trim())}>Buscar imagen manual</button>
+      </div>
+      {notice && <p className={notice === 'Request armado' ? 'msg-ok' : 'msg-bad'}>{notice}</p>}
+      {(phase === 'loading' || busy) && <pre className="sub">{`${CHICKEN} ${caption}`}</pre>}
+      {phase === 'empty' && <pre className="sub">{`${CHICKEN}\ntodo en orden hoy`}</pre>}
+      {phase === 'list' && (
+        <div className="card" style={{ padding: 12 }}>
+          <p className="sub">{visible.length} pedido(s)</p>
+          <div className="disputes-table">
+            <div className="disputes-head">
+              <span>PEDIDO</span><span>TIENDA</span><span>FECHA</span><span>PROBLEMA</span><span>MONTO</span><span>ESTADO</span><span />
+            </div>
+            {visible.map((row) => {
+              const key = `${row.aggregator}-${row.orderId}`
+              const id = `${row.aggregator}:${row.orderId}`
+              const hasImage = Boolean(row.images?.length)
+              const armed = Boolean(ready[id]?.length)
+              return (
+                <article key={key} className="disputes-row">
+                  <b className="clip">{row.orderId}</b>
+                  <span className="clip">{row.store || ''}</span>
+                  <span className="clip sub">{when(row.requested)}</span>
+                  <span className="clip">{issueLabel(row.issue || row.status)}</span>
+                  <span className="clip">{row.amount != null ? money(row.amount) : ''}</span>
+                  <span className="clip">
+                    <span className="chip chip-pending">{bucketLabel(row)}</span>
+                    {armed && <span className="chip chip-armed">Request armado</span>}
+                  </span>
+                  <span style={{ display: 'grid', gap: 4 }}>
+                    <button type="button" className="btn-primary" style={{ width: '100%', opacity: hasImage ? 1 : 0.45 }} disabled={!hasImage} onClick={() => armar(row)}>Armar disputa</button>
+                    <button type="button" className="btn-secondary" style={{ fontSize: 11, padding: '6px 8px' }} onClick={() => addImage(row.aggregator, row.orderId)}>Agregar imagen</button>
+                    {armed && <button type="button" className="btn-secondary" onClick={() => enviar(row)}>Enviar disputa</button>}
+                  </span>
+                  {row.warning && <p className="msg-bad" style={{ gridColumn: '1 / -1', margin: 0 }}>{row.warning}</p>}
+                  {openId === key && row.images?.map((imageId) => (
+                    <img key={imageId} alt="" src={`/api/evidencia/${imageId}/imagen`} style={{ gridColumn: '1 / -1', maxWidth: 240, borderRadius: 10 }} />
+                  ))}
+                </article>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </PanelShell>
+  )
+
+  return embedded ? shell : <>{shell}</>
 }

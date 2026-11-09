@@ -1,6 +1,8 @@
 # Panel de disputas
 
-Panel web para revisar disputas de Uber y PedidosYa, adjuntar la foto del pedido y armar el request. Rappi no tiene listado ni envío en esta versión.
+Panel web para **operaciones** (estado de locales, abrir/cerrar, agotados), **estadísticas**, **disputas** (Uber y PedidosYa), captura de evidencia y **credenciales**. Rappi no tiene conexión en esta versión.
+
+**Guía completa (API, M2M, precauciones, pendientes):** [`iterations/v1/docs/panel-operaciones-y-api.md`](iterations/v1/docs/panel-operaciones-y-api.md).
 
 La app del teléfono y la API de evidencia siguen en `app-delivery`. Este repositorio no guarda cookies, tokens ni la base de fotos.
 
@@ -27,7 +29,22 @@ En cada fila el orden es fijo:
 2. **Armar disputa.** Se habilita cuando esa fila ya tiene imagen. Genera el request con esos `evidence_ids`.
 3. **Enviar disputa.** Se habilita cuando el request ya existe. En esta versión no escribe en Uber: la respuesta es dry-run (`confirm` queda en false). PedidosYa responde 501.
 
-Las credenciales de las plataformas se pegan en **Credenciales**. El valor no vuelve en el GET: solo dice `cargada` o `falta`. Uber espera el header Cookie en una sola línea. PedidosYa espera el JSON con `access` y/o `refresh`.
+Las credenciales se guardan en `iterations/v1/sessions/` (o `SESSIONS_DIR`).
+
+- **Uber:** cookie en el módulo **Credenciales**.
+- **PedidosYa:** usuario y contraseña del portal en **Credenciales**; si el portal pide OTP, el código se ingresa en la misma pantalla. El servidor ejecuta el login del `pya.py` y escribe `pya_tokens.json` para el CLI.
+- **M2M opcional (box):** `Bearer` con `CREDENTIALS_API_TOKEN` para empujar cookies/tokens sin UI.
+
+```http
+POST /api/credentials/uber
+POST /api/credentials/pya
+GET  /api/credentials/status
+Authorization: Bearer <CREDENTIALS_API_TOKEN>
+```
+
+Uber: `{"cookie":"..."}` (opcional prefijo `Cookie:`). PedidosYa: `access`, `refresh` obligatorios; `device` opcional. No se devuelve el secreto; la respuesta trae `length`, `health` y `mtime` en status.
+
+Desde el box: `tools/push_credentials.py` (`PANEL_URL`, `CREDENTIALS_API_TOKEN`). Ver también el doc de inyección en uploads del proyecto.
 
 Si PedidosYa responde con el anti-bot, la pantalla muestra «bloqueo anti-bot» y la lista de Uber ya cargada sigue disponible.
 
@@ -38,6 +55,8 @@ Copiar `iterations/v1/.env.example` a `iterations/v1/.env`. Ese archivo no se ve
 | Variable | Uso |
 |----------|-----|
 | `PANEL_PORT` | Puerto del panel. Default `8790`, solo en `127.0.0.1`. |
+| `SESSIONS_DIR` | Carpeta de `uber_cookie` y `pya_tokens.json`. Default `iterations/v1/sessions`. |
+| `CREDENTIALS_API_TOKEN` | Bearer hex para inyectar desde el box. Vacío = M2M deshabilitado. |
 | `UBER_CLI` | Ruta de `uber.py`. Si no está, usa el CLI de `app-delivery`. |
 | `PYA_CLI` | Ruta de `pya.py`. Misma regla. |
 | `EVIDENCIA_URL` | API de fotos. Default `http://127.0.0.1:8787`. |

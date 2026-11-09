@@ -7,12 +7,29 @@ import { fileURLToPath } from 'node:url'
 import { buildSubmit } from './engine/dispute-submit.js'
 import { listDisputes } from './engine/dispute-list.js'
 import { matchEvidence } from './engine/evidence-match.js'
-import { preparePyaTokens, prepareUberCookie } from './engine/credentials.js'
+import { injectCredentials, preparePyaTokens, prepareUberCookie } from './engine/credentials.js'
+import {
+  authorizeCredentialsBearer,
+  credentialsInjectionEnabled,
+  credentialStatusRich,
+  formatMtime,
+  preparePyaInjection,
+  readJsonBody,
+  uberHealth,
+  pyaHealth,
+} from './credentials-api.mjs'
+import { opsEnsureDb, opsRefresh, opsResumen } from './operations.mjs'
+import { closeStore, openStore, soldoutReport } from './store-actions.mjs'
+import { pyaLoginStart, pyaLoginVerify } from './pya-login.mjs'
+import { pullUberCookie, checkUberCookie } from './uber-cookie.mjs'
+import { loadDotEnv } from './load-env.mjs'
+
+const here = path.dirname(fileURLToPath(import.meta.url))
+loadDotEnv(path.join(here, '../.env'))
 
 const port = Number(process.env.PANEL_PORT || 8790)
-const here = path.dirname(fileURLToPath(import.meta.url))
 const dist = path.resolve(here, '../dist')
-const sessionsDir = path.resolve(here, '../sessions')
+const sessionsDir = path.resolve(process.env.SESSIONS_DIR || path.join(here, '../sessions'))
 const cliHome = path.join(sessionsDir, 'home')
 const uberCli = process.env.UBER_CLI || '/home/dev/app-delivery/panel-delivery-fuentes/delivery-monitor-servidor/clients/uber/uber.py'
 const pyaCli = process.env.PYA_CLI || '/home/dev/app-delivery/panel-delivery-fuentes/delivery-monitor-servidor/clients/pya/pya.py'
@@ -61,6 +78,32 @@ function cookieOf(req) {
 
 function authorized(req) {
   return sessions.has(cookieOf(req))
+}
+
+const SPA_ROUTES = new Set(['/', '/operaciones', '/estadisticas', '/disputas', '/captura', '/credenciales'])
+
+async function evidenceUpload(aggregator, orderId, jpeg) {
+  const base = process.env.EVIDENCIA_URL || 'http://127.0.0.1:8787'
+  const key = process.env.EVIDENCIA_UPLOAD_KEY || ''
+  if (!key) return { status: 401, body: { error: 'sin credencial' } }
+  if (!jpeg || !jpeg.length) return { status: 400, body: { error: 'Falta la foto del pedido' } }
+  const form = new FormData()
+  form.append('agregador', aggregator)
+  form.append('numero_orden', orderId)
+  form.append('imagen', new Blob([jpeg], { type: 'image/jpeg' }), 'captura.jpg')
+  try {
+    const response = await fetch(`${base}/v1/evidencia`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}` },
+      body: form,
+    })
+    const body = await response.json().catch(() => ({}))
+    if (response.status === 401) return { status: 401, body: { error: 'sin credencial' } }
+    if (!response.ok) return { status: 400, body: { error: body.error || 'Falta la foto del pedido' } }
+    return { status: 201, body: { ok: true, id: body.id } }
+  } catch {
+    return { status: 502, body: { error: 'API caída' } }
+  }
 }
 
 async function evidenceList(aggregator, orderId) {
@@ -259,6 +302,10 @@ const server = http.createServer(async (req, res) => {
   const pathname = url.pathname
   console.log(`${req.method} ${pathname}`)
 
+  if (req.method === 'GET' && (pathname === '/healthz' || pathname === '/health')) {
+    return send(res, 200, { ok: true, service: 'panel-disputas' })
+  }
+
   if (req.method === 'POST' && pathname === '/api/login') {
     const body = await readBody(req)
     const ok = same(String(body.user || ''), 'demo') && same(String(body.password || ''), 'demo')
@@ -270,12 +317,271 @@ const server = http.createServer(async (req, res) => {
     })
   }
 
+  if (req.method === 'GET' && pathname === '/api/me') {
+    if (!authorized(req)) return send(res, 401, { error: 'sin credencial' })
+    return send(res, 200, { ok: true })
+  }
+
+  if (req.method === 'GET' && pathname === '/api/credentials/status') {
+    if (authorized(req)) return send(res, 200, credentialStatusRich(sessionsDir))
+    const m2m = authorizeCredentialsBearer(req)
+    if (m2m.ok) return send(res, 200, credentialStatusRich(sessionsDir))
+    if (m2m.status && (req.headers.authorization || '').toLowerCase().startsWith('bearer ')) {
+      return send(res, m2m.status, { error: m2m.error })
+    }
+    return send(res, 401, { error: 'sin credencial' })
+  }
+
+  if (req.method === 'POST' && (pathname === '/api/credentials/uber' || pathname === '/api/credentials/pya')) {
+    const m2m = authorizeCredentialsBearer(req)
+    if (!m2m.ok) return send(res, m2m.status, { error: m2m.error })
+    let body
+    try {
+      body = await readJsonBody(req)
+    } catch (error) {
+      const code = error && error.code === 413 ? 413 : 400
+      return send(res, code, { error: code === 413 ? 'Cuerpo demasiado grande' : 'JSON inválido' })
+    }
+    const check = url.searchParams.get('check') !== 'false'
+    const savedAt = formatMtime(new Date())
+    if (pathname.endsWith('/uber')) {
+      const prepared = prepareUberCookie(String(body.cookie || body.value || ''))
+      if (!prepared.ok) return send(res, 400, { error: prepared.error })
+      writePrivate('uber_cookie', prepared.value)
+      let health = { ok: true }
+      if (check) {
+        health = await uberHealth(cliHome, uberCli)
+      }
+      return send(res, 200, {
+        ok: true,
+        platform: 'uber',
+        saved_at: savedAt,
+        length: prepared.value.length,
+        health,
+      })
+    }
+    const prepared = preparePyaInjection(body)
+    if (!prepared.ok) return send(res, 400, { error: prepared.error })
+    writePrivate('pya_tokens.json', prepared.value)
+    let tokens
+    try {
+      tokens = JSON.parse(prepared.value)
+    } catch {
+      tokens = {}
+    }
+    let health = { ok: true }
+    if (check) {
+      health = await pyaHealth(cliHome, pyaCli, tokens.access)
+    }
+    const lengths = { access: (tokens.access || '').length, refresh: (tokens.refresh || '').length }
+    if (tokens.device) lengths.device = tokens.device.length
+    return send(res, 200, {
+      ok: true,
+      platform: 'pya',
+      saved_at: savedAt,
+      length: lengths,
+      access_expires_in: health.access_expires_in ?? undefined,
+      health,
+    })
+  }
+
   if (pathname.startsWith('/api/') && !authorized(req)) {
     return send(res, 401, { error: 'sin credencial' })
   }
 
-  if (req.method === 'GET' && pathname === '/api/credentials/status') {
-    return send(res, 200, credentialStatus())
+  if (req.method === 'POST' && pathname === '/api/operaciones/estado/actualizar') {
+    const body = await readBody(req)
+    const agregador = body.agregador === 'pedidosya' ? 'pedidosya' : body.agregador === 'rappi' ? 'rappi' : 'uber'
+    const result = await opsRefresh(agregador, cliHome)
+    if (result.error && !result.ok) {
+      const code = result.error === 'sin credencial' ? 401 : result.error === 'bloqueo anti-bot' ? 502 : 502
+      return send(res, code, { error: result.error })
+    }
+    return send(res, 200, result)
+  }
+
+  if (req.method === 'GET' && pathname === '/api/operaciones/resumen') {
+    const agregador = url.searchParams.get('agregador') === 'pedidosya'
+      ? 'pedidosya'
+      : url.searchParams.get('agregador') === 'rappi'
+        ? 'rappi'
+        : 'uber'
+    const result = await opsResumen(agregador, cliHome, {
+      desde: url.searchParams.get('desde') || '',
+      hasta: url.searchParams.get('hasta') || '',
+      agrupar: url.searchParams.get('agrupar') || '',
+    })
+    return send(res, 200, result)
+  }
+
+  if (req.method === 'POST' && pathname === '/api/operaciones/local/abrir') {
+    const body = await readBody(req)
+    const agregador = body.agregador === 'pedidosya' ? 'pedidosya' : body.agregador === 'rappi' ? 'rappi' : 'uber'
+    const storeId = String(body.store_id || '').trim()
+    const name = String(body.name || '').trim()
+    const result = await openStore(agregador, cliHome, uberCli, pyaCli, storeId, name)
+    const code = !result.ok && result.error === 'sin conexion' ? 503 : !result.ok ? 502 : 200
+    return send(res, code, result)
+  }
+
+  if (req.method === 'POST' && pathname === '/api/operaciones/local/cerrar') {
+    const body = await readBody(req)
+    const agregador = body.agregador === 'pedidosya' ? 'pedidosya' : body.agregador === 'rappi' ? 'rappi' : 'uber'
+    const storeId = String(body.store_id || '').trim()
+    const name = String(body.name || '').trim()
+    const result = await closeStore(agregador, cliHome, uberCli, pyaCli, storeId, name)
+    const code = !result.ok && result.error === 'sin conexion' ? 503 : !result.ok ? 502 : 200
+    return send(res, code, result)
+  }
+
+  if (req.method === 'GET' && pathname === '/api/operaciones/local/agotados') {
+    const agregador = url.searchParams.get('agregador') === 'pedidosya'
+      ? 'pedidosya'
+      : url.searchParams.get('agregador') === 'rappi'
+        ? 'rappi'
+        : 'uber'
+    const storeId = String(url.searchParams.get('store_id') || '').trim()
+    const name = String(url.searchParams.get('name') || '').trim()
+    const result = await soldoutReport(agregador, cliHome, uberCli, pyaCli, storeId, name)
+    const code = !result.ok && result.error === 'sin conexion' ? 503 : !result.ok ? 502 : 200
+    return send(res, code, result)
+  }
+
+  if (req.method === 'POST' && pathname === '/api/captura/evidencia') {
+    const body = await readBody(req)
+    const agregador = body.agregador
+    if (agregador !== 'uber' && agregador !== 'pedidosya' && agregador !== 'rappi') {
+      return send(res, 400, { error: 'Falta un agregador válido' })
+    }
+    const orderId = String(body.numero_orden || '').trim()
+    if (!orderId) return send(res, 400, { error: 'Falta el número de orden' })
+    let jpeg
+    try {
+      jpeg = Buffer.from(String(body.imagen || ''), 'base64')
+    } catch {
+      return send(res, 400, { error: 'Falta la foto del pedido' })
+    }
+    if (!jpeg.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) {
+      return send(res, 400, { error: 'Falta la foto del pedido' })
+    }
+    const result = await evidenceUpload(agregador, orderId, jpeg)
+    return send(res, result.status, result.body)
+  }
+
+  if (req.method === 'POST' && pathname === '/api/credentials/uber/login') {
+    const body = await readBody(req)
+    const username = String(body.username || body.user || '').trim()
+    const password = String(body.password || '').trim()
+    const pulled = await pullUberCookie({ cliHome, username, password, forceRenew: true })
+    if (!pulled.ok) return send(res, 400, { error: pulled.error, tried: pulled.tried })
+    writePrivate('uber_cookie', pulled.value)
+    const health = await checkUberCookie({ cliHome, uberCli })
+    if (!health.ok) {
+      return send(res, 422, {
+        error: health.error || 'Cookie obtenida pero Uber la rechazó',
+        length: pulled.length,
+        source: pulled.source,
+        tried: pulled.tried,
+      })
+    }
+    return send(res, 200, {
+      ok: true,
+      message: 'Sesión Uber lista para el script',
+      length: pulled.length,
+      source: pulled.source,
+      stores: health.stores,
+      ...credentialStatusRich(sessionsDir),
+    })
+  }
+
+  if (req.method === 'POST' && pathname === '/api/credentials/uber/refresh') {
+    const body = await readBody(req)
+    const username = String(body.username || body.user || '').trim()
+    const password = String(body.password || '').trim()
+    const pulled = await pullUberCookie({ cliHome, username, password, forceRenew: Boolean(username && password) })
+    if (!pulled.ok) return send(res, 400, { error: pulled.error, tried: pulled.tried })
+    writePrivate('uber_cookie', pulled.value)
+    const health = await checkUberCookie({ cliHome, uberCli })
+    if (!health.ok) {
+      return send(res, 422, {
+        error: health.error || 'Cookie guardada pero Uber la rechazó',
+        tried: pulled.tried,
+        imported: true,
+        length: pulled.length,
+        source: pulled.source,
+      })
+    }
+    return send(res, 200, {
+      ok: true,
+      message: 'Cookie Uber cargada',
+      length: pulled.length,
+      source: pulled.source,
+      stores: health.stores,
+      ...credentialStatusRich(sessionsDir),
+    })
+  }
+
+  if (req.method === 'POST' && pathname === '/api/credentials/uber/check') {
+    const body = await readBody(req)
+    const cookie = body.cookie ? String(body.cookie) : ''
+    const health = await checkUberCookie({ cliHome, uberCli, cookieValue: cookie || undefined })
+    if (!health.ok) return send(res, 400, { error: health.error })
+    if (cookie.trim()) {
+      const prepared = prepareUberCookie(cookie)
+      if (prepared.ok) writePrivate('uber_cookie', prepared.value)
+    }
+    return send(res, 200, { ok: true, stores: health.stores, ...credentialStatusRich(sessionsDir) })
+  }
+
+  if (req.method === 'POST' && pathname === '/api/credentials/pedidosya/login') {
+    const body = await readBody(req)
+    const username = String(body.username || body.user || '').trim()
+    const password = String(body.password || '').trim()
+    if (!username || !password) return send(res, 400, { error: 'Faltan usuario y contraseña' })
+    fs.mkdirSync(cliHome, { recursive: true })
+    const result = await pyaLoginStart({ cliHome, pyaCli, username, password })
+    if (!result.ok) return send(res, 400, { error: result.error })
+    if (result.step === 'otp') {
+      return send(res, 200, { ok: true, otp_required: true, message: 'Ingresa el código que envió PedidosYa' })
+    }
+    const tokenFile = path.join(cliHome, '.pya_tokens.json')
+    if (fs.existsSync(tokenFile)) {
+      writePrivate('pya_tokens.json', fs.readFileSync(tokenFile, 'utf8').replace(/\n$/, ''))
+    }
+    return send(res, 200, { ok: true, otp_required: false, ...credentialStatusRich(sessionsDir) })
+  }
+
+  if (req.method === 'POST' && pathname === '/api/credentials/pedidosya/otp') {
+    const body = await readBody(req)
+    const username = String(body.username || body.user || '').trim()
+    const code = String(body.code || body.otp || '').trim()
+    if (!username || !code) return send(res, 400, { error: 'Faltan usuario y código' })
+    if (!/^\d{4,8}$/.test(code)) return send(res, 400, { error: 'Código inválido' })
+    const result = await pyaLoginVerify({ cliHome, pyaCli, username, code })
+    if (!result.ok) return send(res, 400, { error: result.error })
+    const tokenFile = path.join(cliHome, '.pya_tokens.json')
+    if (fs.existsSync(tokenFile)) {
+      writePrivate('pya_tokens.json', fs.readFileSync(tokenFile, 'utf8').replace(/\n$/, ''))
+    }
+    try {
+      fs.unlinkSync(path.join(cliHome, '.pya_flow'))
+    } catch {
+      // sin flow pendiente
+    }
+    return send(res, 200, { ok: true, message: 'Sesión PedidosYa guardada', ...credentialStatusRich(sessionsDir) })
+  }
+
+  if (req.method === 'POST' && pathname === '/api/credentials') {
+    const body = await readBody(req)
+    const prepared = injectCredentials(body)
+    if (!prepared.ok) return send(res, 400, { error: prepared.error })
+    if (prepared.uber) writePrivate('uber_cookie', prepared.uber)
+    if (prepared.pedidosya) writePrivate('pya_tokens.json', prepared.pedidosya)
+    return send(res, 200, {
+      ok: true,
+      uber: fileReady('uber_cookie') ? 'configured' : 'missing',
+      pedidosya: fileReady('pya_tokens.json') ? 'configured' : 'missing',
+    })
   }
 
   if (req.method === 'PUT' && (pathname === '/api/credentials/uber' || pathname === '/api/credentials/pedidosya')) {
@@ -286,7 +592,11 @@ const server = http.createServer(async (req, res) => {
       : preparePyaTokens(String(body.value || ''))
     if (!prepared.ok) return send(res, 400, { error: prepared.error })
     writePrivate(source === 'uber' ? 'uber_cookie' : 'pya_tokens.json', prepared.value)
-    return send(res, 200, { ok: true, ...credentialStatus() })
+    return send(res, 200, {
+      ok: true,
+      uber: fileReady('uber_cookie') ? 'configured' : 'missing',
+      pedidosya: fileReady('pya_tokens.json') ? 'configured' : 'missing',
+    })
   }
 
   if (req.method === 'GET' && pathname === '/api/disputes') {
@@ -361,7 +671,11 @@ const server = http.createServer(async (req, res) => {
     })
   }
 
-  const filePath = pathname === '/' || pathname === '/disputas'
+  if (pathname.startsWith('/api/')) {
+    return send(res, 404, { error: 'no encontrado' })
+  }
+
+  const filePath = SPA_ROUTES.has(pathname)
     ? path.join(dist, 'index.html')
     : path.join(dist, pathname)
   if (!filePath.startsWith(dist) || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
@@ -377,6 +691,9 @@ const server = http.createServer(async (req, res) => {
   res.end(fs.readFileSync(filePath))
 })
 
+void opsEnsureDb(cliHome)
+
 server.listen(port, '127.0.0.1', () => {
   console.log(`panel escuchando en 127.0.0.1:${port}`)
+  console.log(credentialsInjectionEnabled() ? 'inyección M2M: activa' : 'inyección M2M: deshabilitada (falta CREDENTIALS_API_TOKEN en .env)')
 })

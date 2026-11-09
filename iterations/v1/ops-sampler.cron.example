@@ -1,0 +1,2 @@
+# Instalar: crontab -e y pegar la línea (ajustar usuario y rutas).
+*/5 * * * * OPS_CLI_HOME=/home/dev/panel-disputas/iterations/v1/sessions/home UBER_CLI=/home/dev/app-delivery/panel-delivery-fuentes/delivery-monitor-servidor/clients/uber/uber.py PYA_CLI=/home/dev/app-delivery/panel-delivery-fuentes/delivery-monitor-servidor/clients/pya/pya.py /home/dev/panel-disputas/operations/sample_all.sh >>/tmp/panel-ops-sampler.log 2>&1
