@@ -1,5 +1,7 @@
 # Panel de disputas
 
+La guía de API y operaciones está en el repo en iterations/v1/docs/panel-operaciones-y-api.md.
+
 Panel web para **operaciones** (estado de locales, abrir/cerrar, agotados), **estadísticas**, **disputas** (Uber y PedidosYa), captura de evidencia y **credenciales**. Rappi no tiene conexión en esta versión.
 
 **Guía completa (API, M2M, precauciones, pendientes):** [`iterations/v1/docs/panel-operaciones-y-api.md`](iterations/v1/docs/panel-operaciones-y-api.md).
