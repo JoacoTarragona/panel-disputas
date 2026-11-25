@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>Pago de reembolso — pedido no entregado</title>
+<style>
+  @page {
+    size: A4;
+    margin: 14mm 13mm 16mm;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    color: #1c2423;
+    font-family: "Liberation Sans", "Nimbus Sans", Arial, sans-serif;
+    font-size: 11pt;
+    line-height: 1.45;
+  }
+  h1 {
+    font-size: 22pt;
+    line-height: 1.15;
+    margin: 0 0 4px;
+    letter-spacing: -0.3px;
+  }
+  h2 {
+    font-size: 14pt;
+    margin: 18px 0 8px;
+    color: #0c5c59;
+    page-break-after: avoid;
+  }
+  h3 {
+    font-size: 12pt;
+    margin: 14px 0 4px;
+    page-break-after: avoid;
+  }
+  p { margin: 0 0 8px; }
+  ol, ul { margin: 4px 0 10px; }
+  ol { padding-left: 32px; }
+  ul { padding-left: 20px; }
+  li { margin: 0 0 4px; }
+  strong { font-weight: 700; }
+  .kicker {
+    color: #0c5c59;
+    font-size: 9.5pt;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin: 0 0 6px;
+  }
+  .lede { font-size: 12pt; margin: 8px 0 12px; }
+  header.cover {
+    border-top: 8px solid #0c5c59;
+    padding-top: 14px;
+    margin-bottom: 8px;
+  }
+  .meta {
+    color: #5c6b69;
+    font-size: 9.5pt;
+    margin: 0 0 12px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 6px 0 12px;
+    font-size: 10pt;
+    page-break-inside: avoid;
+  }
+  th, td {
+    border: 1px solid #d5dedc;
+    padding: 5px 7px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: #e7f3f2; color: #0c5c59; font-weight: 700; }
+  .steps td:first-child {
+    width: 28px;
+    text-align: center;
+    font-weight: 700;
+    color: #0c5c59;
+    background: #f4faf9;
+  }
+  figure {
+    margin: 8px 0 12px;
+    page-break-inside: avoid;
+  }
+  figure img {
+    width: 100%;
+    height: auto;
+    border: 1px solid #d5dedc;
+    border-radius: 4px;
+  }
+  figcaption {
+    font-size: 9pt;
+    color: #4e5e5c;
+    margin-top: 4px;
+  }
+  .note, .warn, .ok {
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin: 8px 0 12px;
+    page-break-inside: avoid;
+  }
+  .note { background: #f4faf9; border-left: 4px solid #0c5c59; }
+  .warn { background: #fff6ea; border-left: 4px solid #b86a12; }
+  .ok { background: #eef8f1; border-left: 4px solid #1d7a45; }
+  .note p, .warn p, .ok p { margin: 0; }
+  .pair { display: flex; gap: 10px; }
+  .pair figure { flex: 1; }
+  .small img { width: auto; max-width: 100%; max-height: 280px; }
+  code {
+    font-family: "Liberation Mono", "Nimbus Mono", monospace;
+    font-size: 10pt;
+    background: #f3f5f4;
+    padding: 0 3px;
+  }
+  .foot {
+    margin-top: 16px;
+    font-size: 8.5pt;
+    color: #6b7876;
+  }
+</style>
+</head>
+<body>
+
+<header class="cover">
+  <p class="kicker">Tarragona · Operación de reclamos</p>
+  <h1>Pago de reembolso<br>cuando el pedido no se entregó</h1>
+  <p class="lede">Cómo pasar un caso de BeAware que ya está en <strong>Pago Reembolso</strong>, pedir la devolución en Justo y dejar el caso en <strong>Respuesta Cliente</strong>.</p>
+  <p class="meta">Manual de puesto · a partir de la operación grabada el 25 de noviembre de 2026, 16:15 (hora de Chile). Las capturas son de esa operación. El correo, el teléfono y la tarjeta del cliente van tapados.</p>
+</header>
+
+<h2>1. Para qué sirve</h2>
+<p>El caso ya fue evaluado y el reembolso ya está aprobado. Este procedimiento solo <strong>paga</strong> la devolución y mueve el caso al paso siguiente. No investiga el reclamo y no le escribe al cliente.</p>
+<p>Se usa cuando, en Mis casos, el caso cumple todo esto:</p>
+<ul>
+  <li>Está en el filtro <strong>[REC] Pago Reembolso</strong>.</li>
+  <li>El paso es <strong>Pago Reembolso</strong> y el estado es <strong>En Proceso</strong>.</li>
+  <li>El asunto es un pedido no entregado (en el ejemplo, <strong>PEDIDO NO ENTREGADO</strong>, submotivo <strong>Entrega</strong>).</li>
+</ul>
+
+<h2>2. Antes de empezar</h2>
+<p>Deja dos pestañas abiertas e iniciadas:</p>
+<table>
+  <thead><tr><th>Sistema</th><th>Dónde</th><th>Para qué</th></tr></thead>
+  <tbody>
+    <tr><td>BeAware 360</td><td><code>tarragona.deskbeaware.com</code></td><td>El caso y el paso del proceso.</td></tr>
+    <tr><td>Justo Admin</td><td><code>admin.getjusto.com</code>, marca Tarragona</td><td>La devolución del pedido.</td></tr>
+  </tbody>
+</table>
+<p>En BeAware la empresa es <strong>tarragona</strong>. Entras con tu usuario y pulsas <strong>ENTRAR</strong>. La sesión quedó bien cuando aparece <strong>Inicio de sesión exitosa</strong>.</p>
+
+<figure class="small">
+  <img src="img/01-login.png" alt="Pantalla de ingreso de BeAware 360, empresa tarragona, botón ENTRAR." />
+  <figcaption>Ingreso a BeAware. La empresa es tarragona. La contraseña no se anota en este manual.</figcaption>
+</figure>
+
+<h2>3. Los ocho pasos</h2>
+<table class="steps">
+  <thead><tr><th></th><th>Dónde</th><th>Qué haces</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>BeAware</td><td>Abre Mis casos con el filtro [REC] Pago Reembolso y entra al caso.</td></tr>
+    <tr><td>2</td><td>BeAware, pestaña Datos</td><td>Copia <strong>Número Pedido</strong>. Anota <strong>Devolución Solicitada</strong> y <strong>Devolución Aprobada</strong>.</td></tr>
+    <tr><td>3</td><td>Justo → Ecommerce → Pedidos</td><td>Busca ese número. Tiene que quedar un solo pedido.</td></tr>
+    <tr><td>4</td><td>Justo, el pedido</td><td>Comprueba cliente, local y <strong>Total pagado</strong>.</td></tr>
+    <tr><td>5</td><td>Acciones → Solicitar devolución</td><td>Monto = total pagado. Motivo y mensaje del caso.</td></tr>
+    <tr><td>6</td><td>Justo</td><td>Confirma el aviso verde, reembolsado por el total y disponible en $0.</td></tr>
+    <tr><td>7</td><td>BeAware</td><td>En <strong>Pasos</strong> elige <strong>Respuesta Cliente</strong>.</td></tr>
+    <tr><td>8</td><td>BeAware</td><td>Guarda con el disquete. Tiene que decir <strong>Caso actualizado con éxito</strong>.</td></tr>
+  </tbody>
+</table>
+
+<h2>4. Paso a paso</h2>
+
+<h3>Paso 1. Abre el caso de la cola</h3>
+<p>En Mis casos, el filtro de la izquierda tiene que ser <strong>[REC] Pago Reembolso</strong>. Abre el caso haciendo clic en la fila. En esta operación el primero era el <strong>261125-000003</strong>, asunto <strong>PEDIDO NO ENTREGADO</strong>, contacto Matías Apariz, paso <strong>Pago Reembolso</strong>.</p>
+<figure>
+  <img src="img/02-lista.png" alt="Mis casos con el aviso de sesión exitosa y el caso 261125-000003 en Pago Reembolso." />
+  <figcaption>Cola de pago. El caso a trabajar está en Paso = Pago Reembolso. Los demás casos de la grilla no se muestran.</figcaption>
+</figure>
+
+<h3>Paso 2. Saca el número de pedido y los montos</h3>
+<p>En el caso, baja a las pestañas y abre <strong>Datos</strong>. De ahí salen los tres datos que cruzas con Justo:</p>
+<table>
+  <thead><tr><th>Campo en BeAware</th><th>En este caso</th><th>Para qué</th></tr></thead>
+  <tbody>
+    <tr><td>Número Pedido</td><td>32471058-02</td><td>Es lo que se busca en Justo. Número Boleta iba vacío: no se usa.</td></tr>
+    <tr><td>Devolución Solicitada</td><td>12.990</td><td>Tiene que ser igual al total pagado.</td></tr>
+    <tr><td>Devolución Aprobada</td><td>12.990</td><td>Tiene que ser igual al total pagado.</td></tr>
+  </tbody>
+</table>
+<p>También anota, para reconocer el pedido: contacto <strong>Matías Apariz</strong>, local <strong>Tarragona Viña Outlet Park</strong>, fecha de compra <strong>23/11/2026</strong>, canal de venta <strong>APP Tarragona</strong>. El canal de ingreso del reclamo es Whatsapp: ese es el canal por el que escribió el cliente, no el canal de la venta.</p>
+<figure>
+  <img src="img/03-datos.png" alt="Pestaña Datos con Número Pedido 32471058-02 y devoluciones en 12.990." />
+  <figcaption>Pestaña Datos. El número que se copia es Número Pedido. Las dos devoluciones ya vienen en 12.990 desde el paso anterior.</figcaption>
+</figure>
+<div class="warn">
+  <p><strong>No sigas si los montos no conversan.</strong> Devolución Solicitada y Devolución Aprobada tienen que ser el mismo número, y ese número tiene que ser el total pagado del pedido en Justo. Si uno está vacío o es distinto, no pidas la devolución: déjalo anotado y no muevas el paso.</p>
+</div>
+
+<h3>Paso 3. Busca el pedido en Justo</h3>
+<p>En Justo Admin, marca Tarragona, entra a <strong>Ecommerce → Pedidos</strong>. En <strong>Buscar por ID o nombre</strong> pega la parte numérica del pedido, sin el sufijo: <code>32471058</code>. Tiene que aparecer una sola fila, <strong>#32471058-02</strong>.</p>
+<figure>
+  <img src="img/04-busca.png" alt="Búsqueda en Pedidos de Justo con el resultado 32471058-02 de Matías Apariz por 12.990." />
+  <figcaption>Un solo resultado: #32471058-02, Matías Apariz, Viña Outlet, Para retirar, App Propia, $12.990, Completado, 23/11/2026.</figcaption>
+</figure>
+<p>Abre esa fila. Si la búsqueda trae más de un pedido, abre solo el que coincida en cliente, local y total. Si no aparece ninguno, no inventes otro número.</p>
+
+<h3>Paso 4. Comprueba el pedido antes de tocar Acciones</h3>
+<p>En el pedido, antes de la devolución, estos datos tienen que cuadrar con el caso:</p>
+<ul>
+  <li>Cliente: <strong>Matías Apariz</strong>.</li>
+  <li>Local: <strong>Viña Outlet</strong> (en BeAware figura como Tarragona Viña Outlet Park).</li>
+  <li><strong>Total boleta</strong> y <strong>Total pagado: $12.990</strong>. El producto costaba $22.990 y el cupón TARRAAPP descontó $10.000. El reembolso es por lo pagado, $12.990, no por el precio de lista.</li>
+  <li>Estado del pago: <strong>Pagado</strong>. El pedido puede figurar <strong>Completado</strong> y <strong>Para retirar</strong> aunque el reclamo diga que no se entregó. Eso no impide la devolución.</li>
+</ul>
+
+<h3>Paso 5. Solicita la devolución</h3>
+<p>Arriba a la derecha, <strong>Acciones → Solicitar devolución</strong>.</p>
+<figure>
+  <img src="img/05-acciones.png" alt="Menú Acciones abierto en Solicitar devolución." />
+  <figcaption>El menú Acciones tiene una sola acción para este pago: Solicitar devolución.</figcaption>
+</figure>
+<p>En el cuadro <strong>Solicitar devolución</strong> completa así:</p>
+<table>
+  <thead><tr><th>Campo</th><th>Qué va</th></tr></thead>
+  <tbody>
+    <tr><td>Monto</td><td><strong>12.990</strong>. Es el total pagado, con punto de miles. Tiene que ser igual a Devolución Aprobada.</td></tr>
+    <tr><td>Motivo</td><td><strong>Repartidor - Pedido no entregado por driver</strong>.</td></tr>
+    <tr><td>Mensaje</td><td><code>pedido no entregado por el repartidor</code></td></tr>
+  </tbody>
+</table>
+<figure>
+  <img src="img/06-motivo.png" alt="Lista de motivos de la devolución, con el cursor sobre Pedido no entregado por driver." />
+  <figcaption>Motivo del caso de pedido no entregado. La lista sigue más abajo; se elige el que nombra el reclamo, no el primero por costumbre si el caso fuera otro.</figcaption>
+</figure>
+<figure>
+  <img src="img/07-modal.png" alt="Cuadro Solicitar devolución listo: monto 12.990, motivo y mensaje escritos." />
+  <figcaption>Así queda el cuadro justo antes de pulsar Solicitar.</figcaption>
+</figure>
+<div class="warn">
+  <p><strong>El monto es plata, no el número de pedido.</strong> Si en Monto aparece 32471058, está mal: se pegó el pedido. Bórralo y deja 12.990. Recién ahí pulsa <strong>Solicitar</strong>.</p>
+</div>
+<p>Otros motivos que muestra Justo, por si el caso no es “no entregado”: Pedido retrasado, Producto recibido en mal estado, No hay drivers disponibles, Producto robado, Producto cambiado entre dos clientes, Producto/pedido cambiado entre dos clientes, Maltrato / Cobro indebido. La lista continúa. El mensaje tiene que decir lo mismo que el motivo, en una frase.</p>
+
+<h3>Paso 6. Confirma que Justo la tomó</h3>
+<p>No vuelvas a BeAware con el cuadro recién cerrado. En el pedido tienen que verse estas cuatro cosas:</p>
+<ul>
+  <li>Aviso verde: <strong>Devolución solicitada correctamente</strong>.</li>
+  <li><strong>Monto disponible para devolución: $0</strong>.</li>
+  <li><strong>Reembolsado: $12.990</strong>.</li>
+  <li>En el bloque Devolución: monto <strong>$12.990</strong>, estado <strong>Completada</strong>, mensaje <code>pedido no entregado por el repartidor</code>.</li>
+</ul>
+<figure>
+  <img src="img/08-okjusto.png" alt="Pedido de Justo con la devolución completada, reembolsado 12.990 y disponible en cero." />
+  <figcaption>Devolución tomada. El disponible quedó en $0 y el estado de la devolución en Completada. Correo, teléfono y tarjeta van tapados.</figcaption>
+</figure>
+<div class="warn">
+  <p>Si no aparece el aviso, el disponible no queda en $0 o el estado no es Completada, <strong>no cambies el paso en BeAware</strong>. El caso sigue en Pago Reembolso hasta que Justo muestre la devolución.</p>
+</div>
+
+<h3>Paso 7. Mueve el paso a Respuesta Cliente</h3>
+<p>Vuelve a la pestaña de BeAware. El caso sigue en el paso 9, <strong>Pago Reembolso</strong>. En el campo <strong>Pasos</strong> elige <strong>Respuesta Cliente</strong>.</p>
+<p>Desde este paso el campo ofrece tres salidas: quedarse en Pago Reembolso, pasar a <strong>Respuesta Cliente</strong> o pasar a <strong>Solicitud más Antecedentes</strong>. Con la devolución ya Completada en Justo, la salida es Respuesta Cliente. Solicitud más Antecedentes se usa cuando falta algo para poder pagar, no después de haberlo pagado.</p>
+<figure>
+  <img src="img/09-pasos.png" alt="Caso 261125-000003 con el campo Pasos abierto y el cursor en Respuesta Cliente." />
+  <figcaption>El recorrido va en el paso 9, Pago Reembolso. El siguiente es el 10, Respuesta Cliente.</figcaption>
+</figure>
+<p>El recorrido del reclamo, para ubicarte, es este:</p>
+<ol>
+  <li>Ingreso de reclamo</li>
+  <li>Tarragona CL no sale de local</li>
+  <li>Tarragona CL sale de reclamo local</li>
+  <li>Agregadores</li>
+  <li>Reclamo Justo</li>
+  <li>Aprobar reembolso</li>
+  <li>Evaluar caso</li>
+  <li>Investigar caso</li>
+  <li><strong>Pago reembolso</strong> — aquí empieza este manual</li>
+  <li><strong>Respuesta cliente</strong> — aquí termina</li>
+  <li>Solicitud más antecedentes</li>
+</ol>
+
+<h3>Paso 8. Guarda</h3>
+<p>Arriba a la derecha del caso, al lado del reloj, está el botón verde azulado con el <strong>disquete</strong>. Ese es Guardar. La flecha roja de al lado vuelve atrás: no la uses para salir antes de guardar.</p>
+<figure class="small">
+  <img src="img/11-guardar.png" alt="Botón de guardar con ícono de disquete, junto a la flecha roja de volver." />
+  <figcaption>Guardar es el disquete. La flecha roja solo vuelve a la lista.</figcaption>
+</figure>
+<p>Al guardar, BeAware muestra <strong>Caso actualizado con éxito</strong> y regresa a Mis casos. El caso deja de estar en la cola de Pago Reembolso.</p>
+<figure class="small">
+  <img src="img/10-toast.png" alt="Aviso Mensaje: Caso actualizado con éxito." />
+  <figcaption>Este aviso es el cierre del procedimiento.</figcaption>
+</figure>
+
+<h2>5. El caso de ejemplo, de punta a punta</h2>
+<table>
+  <tbody>
+    <tr><th>Caso</th><td>261125-000003 · PEDIDO NO ENTREGADO</td></tr>
+    <tr><th>Contacto</th><td>Matías Apariz</td></tr>
+    <tr><th>Fecha en la cola</th><td>25-11-2026 10:48</td></tr>
+    <tr><th>Pedido Justo</th><td>#32471058-02</td></tr>
+    <tr><th>Compra</th><td>23-11-2026, 18:50. Retiro en Viña Outlet, rango 19:00. App Propia. Cupón TARRAAPP.</td></tr>
+    <tr><th>Producto</th><td>Basket Chicken Idols. Lista $22.990, descuento $10.000, pagado $12.990 con tarjeta.</td></tr>
+    <tr><th>Devolución</th><td>$12.990 · Repartidor - Pedido no entregado por driver · “pedido no entregado por el repartidor” · Completada</td></tr>
+    <tr><th>Paso al cerrar</th><td>Respuesta Cliente</td></tr>
+  </tbody>
+</table>
+
+<h2>6. Cómo saber que quedó bien</h2>
+<div class="ok">
+  <p>Quedó bien solo si se cumplen las dos. En Justo, la devolución está <strong>Completada</strong> por el total pagado y el disponible está en <strong>$0</strong>. En BeAware, el aviso dice <strong>Caso actualizado con éxito</strong> y el caso ya no está en Pago Reembolso.</p>
+</div>
+<p>Este paso no le responde al cliente. Eso corresponde al paso en el que quedó el caso, Respuesta Cliente.</p>
+
+<h2>7. Si algo no cuadra</h2>
+<table>
+  <thead><tr><th>Lo que ves</th><th>Qué haces</th></tr></thead>
+  <tbody>
+    <tr><td>Devolución Solicitada y Devolución Aprobada no son iguales, o no calzan con el total pagado.</td><td>No pidas la devolución y no muevas el paso.</td></tr>
+    <tr><td>La búsqueda en Justo no trae el pedido, o trae otro cliente u otro local.</td><td>No abras una devolución sobre otro pedido. Vuelve a copiar Número Pedido.</td></tr>
+    <tr><td>El monto del cuadro muestra el número de pedido.</td><td>Déjalo en el total pagado (12.990 en el ejemplo) antes de Solicitar.</td></tr>
+    <tr><td>Justo no muestra Completada, o el disponible no queda en $0.</td><td>El caso se queda en Pago Reembolso.</td></tr>
+    <tr><td>Falta un dato para poder pagar.</td><td>No uses Respuesta Cliente. El paso para pedir lo que falta es Solicitud más Antecedentes, y solo si de verdad no se puede pagar.</td></tr>
+  </tbody>
+</table>
+
+<h2>8. En una mirada</h2>
+<ol>
+  <li>BeAware, filtro <strong>[REC] Pago Reembolso</strong>, abrir el caso.</li>
+  <li>Datos: copiar <strong>Número Pedido</strong>. Las dos devoluciones tienen que ser iguales al total pagado.</li>
+  <li>Justo, <strong>Ecommerce → Pedidos</strong>, buscar el número.</li>
+  <li>Cruzar cliente, local y total pagado.</li>
+  <li><strong>Acciones → Solicitar devolución</strong>: monto = total pagado, motivo <strong>Repartidor - Pedido no entregado por driver</strong>, mensaje <code>pedido no entregado por el repartidor</code>.</li>
+  <li>Ver <strong>Devolución solicitada correctamente</strong>, reembolsado por el total, disponible <strong>$0</strong>, estado <strong>Completada</strong>.</li>
+  <li>BeAware, <strong>Pasos → Respuesta Cliente</strong>.</li>
+  <li>Disquete. Esperar <strong>Caso actualizado con éxito</strong>.</li>
+</ol>
+
+<p class="foot">Tarragona · Pago de reembolso, pedido no entregado · BeAware 360 y Justo Admin · 25 de noviembre de 2026.</p>
+
+</body>
+</html>
