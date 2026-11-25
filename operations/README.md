@@ -1,5 +1,7 @@
 # Operaciones — muestreo y estadísticas
 
+Instructivo para el personal del local (celular, usuarios básicos): [instructivo-captura-para-el-local.md](instructivo-captura-para-el-local.md).
+
 Lectura vía `uber.py` / `pya.py monitor --json`. Sin Playwright.
 
 ## Base
